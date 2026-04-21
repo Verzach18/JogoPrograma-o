@@ -44,6 +44,8 @@ class HUD:
         drone = engine.drone
         progression = engine.progression
         now = time.time()
+        self.hover_text = None
+        mouse_pos = pygame.mouse.get_pos()
         
         # Top Bar (Glassmorphism)
         bar_surf = pygame.Surface((sw, 45), pygame.SRCALPHA)
@@ -51,10 +53,21 @@ class HUD:
         pygame.draw.line(bar_surf, COLOR_ACCENT, (0, 45), (sw, 45), 2)
         surface.blit(bar_surf, (0, 0))
         
-        # Resources
+        # 1. Resources (Left)
+        res_rect = pygame.Rect(15, 8, 250, 30)
         res_text = f"Biomass: {drone.resources['Biomass']} | Minerals: {drone.resources['Minerals']}"
         res_surf = self.font.render(res_text, True, (0, 255, 100))
-        surface.blit(res_surf, (20, 10))
+        surface.blit(res_surf, (res_rect.x, res_rect.y + 2))
+        
+        if res_rect.collidepoint(mouse_pos):
+            self.hover_text = "RECURSOS: Biomassa (plantas) e Minerais (minas) usados para pesquisas."
+
+        # 2. Energy Bar (Center-Leftish)
+        energy_x = 280
+        energy_rect = pygame.Rect(energy_x, 5, 130, 35)
+        energy_label = self.font_small.render("ENERGY", True, (255, 255, 0))
+        surface.blit(energy_label, (energy_x, 5))
+        self.draw_progress_bar(surface, energy_x, 22, 120, 10, drone.energy / drone.max_energy, (255, 200, 0))
 
         # Current Mission (Relocated to Side Panel)
         if engine.missions.active_mission:
@@ -93,25 +106,27 @@ class HUD:
                 hint = self.font_small.render(f"> {m.hint}", True, (150, 150, 200))
                 surface.blit(hint, (side_x + 10, box_y + 82))
 
-        # Terraforming Stats (Center)
-        stats_x = sw // 2 - 150
+        # Terraforming Stats (Right-ish)
+        stats_x = sw - 550
+        o2_rect = pygame.Rect(stats_x, 5, 140, 35)
         o2_label = self.font_small.render(f"O2: {engine.oxygen:.1f}%", True, (100, 200, 255))
         surface.blit(o2_label, (stats_x, 5))
-        self.draw_progress_bar(surface, stats_x, 22, 140, 10, engine.oxygen / 100.0, (100, 200, 255))
+        self.draw_progress_bar(surface, stats_x, 22, 130, 10, engine.oxygen / 100.0, (100, 200, 255))
         
+        if o2_rect.collidepoint(pygame.mouse.get_pos()):
+            self.hover_text = "OXIGÊNIO: Nível atmosférico. Afeta a cor do planeta e vida."
+
+        temp_x = stats_x + 150
+        temp_rect = pygame.Rect(temp_x, 5, 140, 35)
         temp_label = self.font_small.render(f"TEMP: {engine.temperature:.1f}°C", True, (255, 150, 50))
-        surface.blit(temp_label, (stats_x + 160, 5))
+        surface.blit(temp_label, (temp_x, 5))
         temp_progress = (engine.temperature + 50) / 100.0
-        self.draw_progress_bar(surface, stats_x + 160, 22, 140, 10, temp_progress, (255, 150, 50))
+        self.draw_progress_bar(surface, temp_x, 22, 130, 10, temp_progress, (255, 150, 50))
         
-        # Unlocks Status
-        self.research_btn_rect = pygame.Rect(sw - 150, 7, 140, 30)
-        status_x = self.research_btn_rect.x - 320
-        for i, (feat, unlocked) in enumerate(progression.unlocked.items()):
-            if i > 4: break
-            color = (0, 255, 0) if unlocked else (100, 100, 100)
-            text = self.font_small.render(f"{feat.upper()}", True, color)
-            surface.blit(text, (status_x + i*60, 15))
+        if temp_rect.collidepoint(pygame.mouse.get_pos()):
+            self.hover_text = "TEMPERATURA: Calor planetário. Afeta o crescimento biológico."
+        
+        # Removed redundant unlock status list from top bar
 
         # Pulse Research button if mission is research
         r_btn_color = (60, 60, 100)
@@ -124,14 +139,34 @@ class HUD:
         r_rect = r_text.get_rect(center=self.research_btn_rect.center)
         surface.blit(r_text, r_rect)
 
+        # 5. Tooltip Rendering
+        if self.hover_text:
+            t_surf = self.font_small.render(self.hover_text, True, (255, 255, 255))
+            t_rect = t_surf.get_rect(centerx=mouse_pos[0], top=mouse_pos[1] + 25)
+            t_rect.x = max(10, min(sw - t_rect.w - 10, t_rect.x))
+            bg_rect = t_rect.inflate(10, 10)
+            pygame.draw.rect(surface, (30, 35, 60, 240), bg_rect, border_radius=4)
+            pygame.draw.rect(surface, COLOR_ACCENT, bg_rect, width=1, border_radius=4)
+            surface.blit(t_surf, t_rect)
+
+
 class TutorialWindow(Window):
     def __init__(self, x, y, w, h):
         super().__init__(x, y, w, h, "Guia de Comandos")
         self.font = pygame.font.SysFont("Arial", 13)
+        self.scroll_y = 0
         
     def handle_event(self, event):
+        if not self.active: return False
         res = super().handle_event(event)
-        # We don't allow closing the tutorial window in the sidebar layout
+        if res == "CLOSE": 
+            self.active = False
+            return True
+        
+        if self.active and event.type == pygame.MOUSEWHEEL:
+            if self.rect.collidepoint(pygame.mouse.get_pos()):
+                self.scroll_y = max(0, self.scroll_y - event.y * 20)
+                return True
         return res
         
     def draw(self, surface, engine):
@@ -141,43 +176,56 @@ class TutorialWindow(Window):
         content = []
         prog = engine.progression
         
-        content.append("COMANDOS BÁSICOS:")
+        content.append("GUIA DE REFERÊNCIA:")
         content.append("- drone.move(Direction.UP/DOWN/LEFT/RIGHT)")
-        content.append("- drone.till(): Preparar solo")
-        content.append("- drone.plant(Entities.GRASS): Plantar")
-        content.append("- drone.harvest(): Coletar biomassa")
+        content.append("- drone.till() / drone.plant(Entities.GRASS)")
+        content.append("- drone.harvest() / drone.build_solar_panel()")
         
         content.append("")
-        content.append("ESTRUTURAS:")
-        if prog.can_use("miner"):
-            content.append("- drone.build_miner(): Minerador Automático")
-        else: content.append("- (Bloqueado) Minerador")
-            
-        if prog.can_use("atmo_gen_unlock"):
-            content.append("- drone.build_atmo_gen(): Gerador de O2")
-        else: content.append("- (Bloqueado) Gerador O2")
+        content.append("SOFTWARES DESBLOQUEADOS:")
+        if prog.can_use("navigation_unlock"):
+            content.append("- drone.move_to(x, y): Piloto Automático")
+        if prog.can_use("inspector_unlock"):
+            content.append("- data = drone.inspect(): Sensor de Tile")
+        if prog.can_use("if_statements"):
+            content.append("- if data['tile'] == 'MINERAL_NODE': ...")
+        if prog.can_use("loops"):
+            content.append("- while True: (Execução Contínua)")
+        if prog.can_use("functions"):
+            content.append("- def minha_funcao(): (Modularização)")
 
-        if prog.can_use("loops") or prog.can_use("if_statements"):
-            content.append("")
-            content.append("PROGRAMAÇÃO AVANÇADA:")
-            if prog.can_use("loops"): content.append("- while True: (Loop infinito)")
-            if prog.can_use("if_statements"): content.append("- if drone.can_harvest(): (Condicional)")
+        content.append("")
+        content.append("HARDWARE:")
+        speed = "Lento"
+        if prog.can_use("speed_upgrade_2"): speed = "Turbo"
+        elif prog.can_use("speed_upgrade_1"): speed = "Rápido"
+        content.append(f"- Velocidade do Drone: {speed}")
+        content.append(f"- Energia Max: {int(engine.drone.max_energy)}")
+
+        # Clipping
+        content_rect = pygame.Rect(self.rect.x + 2, self.rect.y + 35, self.rect.w - 4, self.rect.h - 40)
+        old_clip = surface.get_clip()
+        surface.set_clip(content_rect)
 
         for i, line in enumerate(content):
             color = COLOR_TEXT
             px = 15
-            if "BÁSICOS" in line or "ESTRUTURAS" in line or "AVANÇADA" in line: 
+            y_pos = self.rect.y + 45 + i * 18 - self.scroll_y
+            
+            if ":" in line and "-" not in line: 
                 color = COLOR_SUCCESS
                 px = 10
-                # Small underline for headers
-                pygame.draw.line(surface, (40, 50, 80), (self.rect.x + 10, self.rect.y + 60 + i * 18), 
-                                 (self.rect.right - 10, self.rect.y + 60 + i * 18), 1)
+                pygame.draw.line(surface, (40, 50, 80), (self.rect.x + 10, y_pos + 15), 
+                                 (self.rect.right - 10, y_pos + 15), 1)
             elif "-" in line: 
                 color = (200, 200, 255)
                 px = 20
-            elif "(Bloqueado)" in line: 
-                color = (100, 100, 110)
-                px = 20
             
             surf = self.font.render(line, True, color)
-            surface.blit(surf, (self.rect.x + px, self.rect.y + 45 + i * 18))
+            surface.blit(surf, (self.rect.x + px, y_pos))
+
+        surface.set_clip(old_clip)
+        
+        # Scrollbar hint
+        if len(content) * 18 > self.rect.h - 50:
+            pygame.draw.rect(surface, (60, 60, 100), (self.rect.right - 6, self.rect.y + 40, 2, self.rect.h - 50), border_radius=1)

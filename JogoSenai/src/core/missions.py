@@ -44,26 +44,40 @@ class MissionManager:
                     reward_biomass=50, hint="Grama é a base de toda vida (e biomassa)."),
             Mission("harvest", "Colheita de Dados", "Espere a grama crescer e use 'drone.harvest()' para coletar 3 recursos.", 3, 
                     reward_minerals=20, hint="Recursos permitem desbloquear novas tecnologias."),
-            Mission("research", "Expansão Científica", "Abra o Lab de Pesquisa (R) e desbloqueie 'Loops' por 50 Biomassa.", 1, 
-                    reward_biomass=100, hint="Automação é a chave para o sucesso.")
+            Mission("research", "Lab de Pesquisa", "Abra o Lab (R) e desbloqueie 'CONDITIONALS' para melhorar seu código.", 1, 
+                    reward_biomass=100, hint="Automação avançada requer lógica."),
+            Mission("solar", "Energia Infinita", "Construa um Painel Solar para garantir que seu drone nunca pare.", 1, 
+                    reward_biomass=150, hint="Use drone.build_solar_panel() em um tile vazio."),
+            Mission("navigation", "Autopilot", "Pesquise 'NAV: MODULE I' e use 'drone.move_to(0, 0)' para retornar à base.", 1, 
+                    reward_biomass=200, hint="move_to() facilita muito a navegação."),
+            Mission("automation", "Loop Infinito", "Pesquise 'LOOPS' e escreva um script que plante e colha automaticamente.", 1, 
+                    reward_biomass=500, hint="Use 'while True:' para manter o drone trabalhando para sempre.")
         ]
         self.current_idx = 0
         self.active_mission = self.missions[0]
         self.notifications = None # Injected by engine
 
     def update_progress(self, action_type, drone, count=1):
-        if not self.active_mission:
-            return
+        if not self.active_mission: return
 
-        if self.active_mission.check_progress(action_type, count):
+        # Custom logic for some missions
+        if self.active_mission.id == "solar" and action_type == "build_solar_panel":
+            self.active_mission.current_count += 1
+        elif self.active_mission.id == "navigation" and action_type == "move" and drone.x == 0 and drone.y == 0:
+            self.active_mission.current_count += 1
+        elif self.active_mission.id == "automation" and action_type == "harvest":
+            self.active_mission.current_count += 1
+        else:
+            self.active_mission.check_progress(action_type, count)
+
+        if self.active_mission.completed or self.active_mission.current_count >= self.active_mission.target_count:
+            self.active_mission.completed = True
             # Reward
             drone.resources["Biomass"] += self.active_mission.reward_biomass
             drone.resources["Minerals"] += self.active_mission.reward_minerals
             
             if self.notifications:
                 self.notifications.add_notification("MISSÃO CONCLUÍDA", f"{self.active_mission.title} finalizada!", color=COLOR_SUCCESS)
-            
-            drone.log(f"MISSÃO CONCLUÍDA: {self.active_mission.title}!")
             
             # Next mission
             self.current_idx += 1
@@ -73,5 +87,3 @@ class MissionManager:
                     self.notifications.add_notification("NOVO OBJETIVO", self.active_mission.title, duration=4.0)
             else:
                 self.active_mission = None
-                if self.notifications:
-                    self.notifications.add_notification("CAPÍTULO 1 COMPLETO", "Você dominou o básico da terraformação!", color=COLOR_SECONDARY)

@@ -1,5 +1,6 @@
 import pygame # type: ignore
 import time
+import random
 from config import *
 from entities.world import World
 from entities.drone import Drone
@@ -58,16 +59,17 @@ class GameEngine:
         # Proportional sidebar stack (No overlap)
         side_w = int(self.sw * 0.30)
         side_x = self.sw - side_w - 20
-        self.editor = CodeEditor(side_x, 165, side_w, int(self.sh * 0.38)) 
-        self.docs = TutorialWindow(side_x, self.sh - 265, side_w, 250) 
+        # Adjusted heights and positions for a clean stack
+        self.editor = CodeEditor(side_x, 165, side_w, int(self.sh * 0.35)) 
+        self.docs = TutorialWindow(side_x, 165 + int(self.sh * 0.35) + 10, side_w, int(self.sh * 0.22)) 
         self.hud = HUD()
         
         console_w = int(self.sw * 0.65)
         self.console = Console(20, self.sh - 150, console_w, 130)
         
-        self.run_button = RunButton(side_panel_x, self.sh - 90, side_panel_w, 35)
-        self.stop_button = StopButton(side_panel_x, self.sh - 50, side_panel_w, 35)
-        self.research_window = ResearchWindow(self.sw//2 - 225, self.sh//2 - 250, 450, 500) # Increased height
+        self.run_button = RunButton(side_x, self.sh - 90, side_w, 35)
+        self.stop_button = StopButton(side_x, self.sh - 50, side_w, 35)
+        self.research_window = ResearchWindow(self.sw//2 - 225, self.sh//2 - 250, 450, 500)
         
         # Windows visibility
         self.docs.active = True
@@ -78,6 +80,17 @@ class GameEngine:
         
         self.last_step_time = 0
         self.drone_speed = INITIAL_SPEED
+
+        # Visual Effects
+        self.stars = []
+        for _ in range(200):
+            self.stars.append({
+                "pos": [random.randint(0, self.sw), random.randint(0, self.sh)],
+                "size": random.uniform(0.5, 2.5),
+                "speed": random.uniform(0.02, 0.1),
+                "color": random.choice([(255, 255, 255), (200, 220, 255), (255, 240, 200)])
+            })
+        self.particles = []
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -180,26 +193,30 @@ class GameEngine:
         side_w = int(sw * 0.30)
         side_x = sw - side_w - 20
         
-        # 1. Mission (Handled by HUD, but we reserve space)
-        # y: 55, h: 105
+        # Proportional heights to avoid overlap in any resolution
+        # Editor takes 35% of screen height
+        editor_h = int(sh * 0.35)
+        self.editor = CodeEditor(side_x, 165, side_w, editor_h)
         
-        # 2. Editor (Middle)
-        self.editor = CodeEditor(side_x, 165, side_w, int(sh * 0.38))
+        # Tutorial takes 25% of screen height, positioned below editor
+        docs_y = 165 + editor_h + 10
+        docs_h = int(sh * 0.25)
+        self.docs = TutorialWindow(side_x, docs_y, side_w, docs_h)
         
-        # 3. Tutorial (Bottom)
-        self.docs = TutorialWindow(side_x, sh - 265, side_w, 250)
-        self.docs.active = True
+        # Buttons are at the bottom of the sidebar area
+        self.run_button = RunButton(side_x, sh - 95, side_w, 40)
+        self.stop_button = StopButton(side_x, sh - 50, side_w, 40)
         
+        # Ensure windows don't overlap the buttons
+        if docs_y + docs_h > sh - 100:
+            self.docs.rect.h = (sh - 105) - docs_y
+            self.docs.full_h = self.docs.rect.h
+            
         self.windows = [self.editor, self.docs]
         
         console_w = int(sw * 0.65)
         self.console = Console(20, sh - 150, console_w, 130)
-        
-        # Move buttons to a more accessible place (Below Console or next to it)
-        self.run_button = RunButton(side_x, sh - 95, side_w, 40)
-        self.stop_button = StopButton(side_x, sh - 50, side_w, 40)
         self.research_window = ResearchWindow(sw//2 - 225, sh//2 - 200, 450, 400)
-        # Note: self.docs.active will be handled by the caller or defaults to False
 
     def reset_game(self):
         self.world = World()
@@ -212,6 +229,11 @@ class GameEngine:
     def update(self):
         if self.state != GameState.PLAYING: return
         
+        # Calculate Speed (Hardware upgrades)
+        self.drone_speed = INITIAL_SPEED
+        if self.progression.can_use("speed_upgrade_1"): self.drone_speed *= 0.7
+        if self.progression.can_use("speed_upgrade_2"): self.drone_speed *= 0.5
+
         self.world.update(self)
         self.drone.update()
         
@@ -222,7 +244,31 @@ class GameEngine:
             self.missions.update_progress(action, self.drone)
             self.last_step_time = now
             
+            # Emit particles for actions
+            if action in ["till", "plant", "harvest"]:
+                self.emit_particles(self.drone.x, self.drone.y, COLOR_ACCENT if action == "plant" else (100, 70, 50))
+            
         self.notifications.update()
+        
+        # Update Particles
+        for p in self.particles[:]:
+            p["pos"][0] += p["vel"][0]
+            p["pos"][1] += p["vel"][1]
+            p["life"] -= 1
+            if p["life"] <= 0:
+                self.particles.remove(p)
+
+    def emit_particles(self, x, y, color):
+        px = x * TILE_SIZE + self.camera_offset[0] + TILE_SIZE // 2
+        py = y * TILE_SIZE + self.camera_offset[1] + TILE_SIZE // 2
+        for _ in range(10):
+            self.particles.append({
+                "pos": [px, py],
+                "vel": [random.uniform(-2, 2), random.uniform(-2, 2)],
+                "life": random.randint(20, 40),
+                "color": color,
+                "size": random.randint(2, 5)
+            })
 
     def draw(self):
         if self.state == GameState.MENU:
@@ -235,10 +281,34 @@ class GameEngine:
             pygame.display.flip()
             return
 
-        self.screen.fill(COLOR_BG)
+        # Calculate Dynamic Sky Color (Feature 1)
+        o2_factor = min(1.0, self.oxygen / 100.0)
+        if o2_factor < 0.5:
+            # Transition Space -> Low Sky
+            t = o2_factor * 2.0
+            sky_color = [int(COLOR_SPACE[i] + (COLOR_SKY_LOW[i] - COLOR_SPACE[i]) * t) for i in range(3)]
+        else:
+            # Transition Low Sky -> Full Sky
+            t = (o2_factor - 0.5) * 2.0
+            sky_color = [int(COLOR_SKY_LOW[i] + (COLOR_SKY_FULL[i] - COLOR_SKY_LOW[i]) * t) for i in range(3)]
+
+        self.screen.fill(sky_color)
         
+        # 1. Draw Starfield (Parallax) - Stars fade as sky gets brighter
+        star_alpha = max(0, 255 - int(o2_factor * 300))
+        for star in self.stars:
+            if star_alpha <= 0: break
+            px = (star["pos"][0] + self.camera_offset[0] * star["speed"]) % self.sw
+            py = (star["pos"][1] + self.camera_offset[1] * star["speed"]) % self.sh
+            
+            # Star color with alpha
+            s_color = (*star["color"], star_alpha)
+            s_surf = pygame.Surface((int(star["size"])*2, int(star["size"])*2), pygame.SRCALPHA)
+            pygame.draw.circle(s_surf, s_color, (int(star["size"]), int(star["size"])), int(star["size"]))
+            self.screen.blit(s_surf, (int(px), int(py)))
+
         # World & Drone
-        self.world.draw(self.screen, self.camera_offset)
+        self.world.draw(self.screen, self.camera_offset, self)
         self.drone.draw(self.screen, self.camera_offset)
         
         # Draw Windows in Z-order
@@ -252,6 +322,13 @@ class GameEngine:
         self.stop_button.draw(self.screen)
         self.research_window.draw(self.screen, self.progression, self.drone)
         self.notifications.draw(self.screen)
+        
+        # Draw Particles
+        for p in self.particles:
+            alpha = int(255 * (p["life"] / 40))
+            p_surf = pygame.Surface((p["size"], p["size"]), pygame.SRCALPHA)
+            pygame.draw.circle(p_surf, (*p["color"][:3], alpha), (p["size"]//2, p["size"]//2), p["size"]//2)
+            self.screen.blit(p_surf, p["pos"])
         
         if self.state == GameState.PAUSED:
             self.pause_menu.draw(self.screen)

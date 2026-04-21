@@ -16,9 +16,9 @@ class CodeEditor(Window):
         self.suggestion_idx = 0
         self.show_suggestions = False
         self.keywords = {
-            "drone.": ["move(", "till()", "plant(", "harvest()", "build_miner()", "build_atmo_gen()", "build_heater()", "do_a_flip()"],
+            "drone.": ["move(", "move_to(", "inspect()", "till()", "plant(", "harvest()", "build_miner()", "build_atmo_gen()", "build_heater()", "build_solar_panel()", "do_a_flip()"],
             "Direction.": ["UP", "DOWN", "LEFT", "RIGHT"],
-            "Entities.": ["GRASS", "TREE", "MINER", "ATMOSPHERE_GEN", "HEATER", "MINERAL_NODE"]
+            "Entities.": ["GRASS", "TREE", "MINER", "ATMOSPHERE_GEN", "HEATER", "MINERAL_NODE", "SOLAR_PANEL"]
         }
         self.all_base_keywords = ["drone", "Direction", "Entities", "while", "for", "if", "else", "True", "False"]
 
@@ -159,10 +159,21 @@ class CodeEditor(Window):
             num_rect = num_surf.get_rect(right=gutter_rect.right - 5, y=clip_rect.y + i * 22)
             surface.blit(num_surf, num_rect)
 
-            # Highlighting current line
+            # Highlighting current line (Cursor)
             if i == self.cursor_line and self.active:
                 h_rect = pygame.Rect(0, i * 22, clip_rect.w, 22)
                 pygame.draw.rect(text_surface, (50, 60, 100, 100), h_rect)
+
+            # Highlighting execution line (Visual Debugger - Feature 5)
+            if engine and engine.drone.current_line == i + 1:
+                e_rect = pygame.Rect(0, i * 22, clip_rect.w, 22)
+                pygame.draw.rect(text_surface, (100, 100, 0, 80), e_rect) # Yellowish highlight
+                # Add a small "arrow" in the gutter
+                pygame.draw.polygon(surface, (255, 255, 0), [
+                    (gutter_rect.x + 5, clip_rect.y + i * 22 + 5),
+                    (gutter_rect.x + 15, clip_rect.y + i * 22 + 11),
+                    (gutter_rect.x + 5, clip_rect.y + i * 22 + 17)
+                ])
 
             # Code
             color = COLOR_TEXT

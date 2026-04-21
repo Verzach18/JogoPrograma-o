@@ -5,7 +5,7 @@ from enum import Enum
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 FPS = 60
-FULLSCREEN = True 
+FULLSCREEN = False 
 
 class WindowMode(Enum):
     WINDOWED = 0
@@ -52,6 +52,7 @@ class Entities(Enum):
     ATMOSPHERE_GEN = 4
     MINERAL_NODE = 5
     HEATER = 6
+    SOLAR_PANEL = 7
 
 # Directions
 class Direction(Enum):
@@ -60,19 +61,47 @@ class Direction(Enum):
     RIGHT = (1, 0)
     LEFT = (-1, 0)
 
+# Energy Settings
+MAX_ENERGY = 100.0
+MOVE_COST = 0.5
+ACTION_COST = 1.0
+SOLAR_GEN = 0.2
+
+# Sky Colors (Blending)
+COLOR_SPACE = (10, 12, 20)
+COLOR_SKY_LOW = (30, 45, 80)
+COLOR_SKY_FULL = (100, 180, 255)
+
 # Progression Costs (in Biomass/Oxygen)
 COSTS = {
-    "loops": 50,
-    "if_statements": 150,
+    # Software
+    "if_statements": 100,
+    "loops": 250,
     "functions": 500,
-    "speed_upgrade": 100,
-    "grid_expand": 300,
+    "navigation_unlock": 150,
+    "inspector_unlock": 200,
+    
+    # Hardware
+    "speed_upgrade_1": 100,
+    "speed_upgrade_2": 300,
+    "battery_1": 150,
+    "battery_2": 400,
+    
+    # Planet
     "miner_unlock": 250,
-    "miner_build": 100, # Cost in Minerals
-    "atmo_gen_unlock": 500,
-    "atmo_gen_build": 300, # Cost in Biomass
-    "heater_unlock": 1000,
-    "heater_build": 500, # Cost in Minerals
+    "miner_build": 100,
+    "atmo_gen_unlock": 400,
+    "atmo_gen_build": 300,
+    "heater_unlock": 800,
+    "heater_build": 500,
+}
+
+# Research Dependencies (id -> list of required ids)
+RESEARCH_TREE = {
+    "loops": ["if_statements"],
+    "functions": ["loops"],
+    "speed_upgrade_2": ["speed_upgrade_1"],
+    "battery_2": ["battery_1"],
 }
 
 # Terraforming Goals
@@ -81,3 +110,33 @@ GOAL_TEMP = 100.0
 
 # Drone Constants
 INITIAL_SPEED = 0.5 # Seconds per action
+
+# Asset Management
+import os
+ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
+
+def load_image(name, size=None):
+    path = os.path.join(ASSETS_DIR, f"{name}.png")
+    try:
+        img = pygame.image.load(path).convert_alpha()
+        # Remove white background (common for generated images)
+        # Note: convert_alpha is usually better, but if the image has a solid white bg:
+        # img.set_colorkey((255, 255, 255))
+        if size:
+            img = pygame.transform.scale(img, (size, size))
+        return img
+    except:
+        # Fallback to a colored surface if image not found
+        surf = pygame.Surface((size or TILE_SIZE, size or TILE_SIZE), pygame.SRCALPHA)
+        pygame.draw.rect(surf, COLOR_ACCENT, surf.get_rect(), border_radius=5)
+        return surf
+
+class Assets:
+    _cache = {}
+
+    @classmethod
+    def get(cls, name, size=None):
+        key = (name, size)
+        if key not in cls._cache:
+            cls._cache[key] = load_image(name, size)
+        return cls._cache[key]

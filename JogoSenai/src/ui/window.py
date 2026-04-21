@@ -62,21 +62,27 @@ class Window:
         # Create a transparent surface for the window body
         win_surf = pygame.Surface((self.rect.w, self.rect.h), pygame.SRCALPHA)
         
-        # Window Body (Glass effect vs Solid for active)
-        bg_color = (20, 22, 35, 255) if self.active else (20, 22, 35, 180)
-        pygame.draw.rect(win_surf, bg_color, (0, 0, self.rect.w, self.rect.h), border_radius=12)
+        # Window Body (Glass effect)
+        alpha = 240 if self.active else 180
+        bg_color = (15, 18, 30, alpha)
+        pygame.draw.rect(win_surf, bg_color, (0, 0, self.rect.w, self.rect.h), border_radius=10)
         
-        # Title Bar
-        t_color = (60, 70, 120, 255) if self.active else (40, 45, 70, 200)
+        # Title Bar Gradient-ish
+        t_color = (45, 55, 90, 255) if self.active else (35, 40, 60, 200)
         pygame.draw.rect(win_surf, t_color, (0, 0, self.rect.w, 35), 
-                         border_top_left_radius=12, border_top_right_radius=12,
-                         border_bottom_left_radius=12 if self.minimized else 0,
-                         border_bottom_right_radius=12 if self.minimized else 0)
+                         border_top_left_radius=10, border_top_right_radius=10,
+                         border_bottom_left_radius=10 if self.minimized else 0,
+                         border_bottom_right_radius=10 if self.minimized else 0)
+        # Subtle light highlight on top of title bar
+        pygame.draw.line(win_surf, (100, 120, 200, 150), (10, 1), (self.rect.w - 10, 1), 1)
         
+        # Inner Shadow/Glow effect
+        if self.active:
+            pygame.draw.rect(win_surf, (0, 150, 255, 40), (0, 0, self.rect.w, self.rect.h), width=5, border_radius=10)
+
         # Border (Neon Glow)
-        border_color = COLOR_ACCENT if self.active else (80, 80, 100)
-        border_width = 3 if self.active else 1
-        pygame.draw.rect(win_surf, border_color, (0, 0, self.rect.w, self.rect.h), width=border_width, border_radius=12)
+        border_color = COLOR_ACCENT if self.active else (60, 65, 80)
+        pygame.draw.rect(win_surf, border_color, (0, 0, self.rect.w, self.rect.h), width=2, border_radius=10)
         
         # Draw on main surface
         surface.blit(win_surf, self.rect)
